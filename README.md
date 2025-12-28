@@ -2,7 +2,7 @@
 
 > AI-powered local travel assistant for Nagpur commuters | Built for Kiro Challenge Week 5
 
-**Live Demo**: [Your Vercel URL here]
+**Live Demo**: (https://nagpur-daily-commuter-guide-cmuzybbw3-ritik-flaees-projects.vercel.app/)
 
 ---
 
