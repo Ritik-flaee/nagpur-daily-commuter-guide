@@ -1,0 +1,59 @@
+{
+    "project": "nagpur-daily-commuter-guide",
+    "version": "1.0.0",
+    "description": "AI-powered hyper-local guide for Nagpur commuters - demonstrates Kiro's ability to leverage custom context files for deep local expertise",
+    "kiro": {
+        "context_file": "product.md",
+        "context_size": "~1200 lines",
+        "knowledge_domains": [
+            "Nagpur geography & traffic hotspots",
+            "Public transport system (buses, autos, metros)",
+            "Traffic patterns by time & season",
+            "Auto fare negotiation strategies",
+            "Local slang & communication phrases",
+            "Safety guidelines (especially for women)",
+            "Monsoon & weather impacts",
+            "Festival traffic predictions",
+            "Local landmarks & food spots"
+        ],
+        "personality_guidelines": {
+            "tone": "Casual, witty, friendly local friend",
+            "language": "Mix Marathi/Nagpuri slang with English",
+            "response_style": "Concise (3-4 sentences), practical with time estimates",
+            "emoji_usage": "Heavy - use ✅, 🚨, ⚠️, 🔥, 🚕, 🚌, ☕, 🌧️",
+            "safety_priority": "Always prioritize safety over cost/speed"
+        }
+    },
+    "features": [
+        "Traffic & route recommendations with time estimates",
+        "Auto fare negotiation guidance with haggling scripts",
+        "Monsoon safety warnings with alternate routes",
+        "Festival impact predictions",
+        "Women-specific safety advice",
+        "Local slang translator & communication tips",
+        "Chai spot recommendations when stuck in traffic"
+    ],
+    "tech_stack": {
+        "frontend": "Streamlit",
+        "backend": "Python rule-based system (demo)",
+        "context": "product.md (knowledge base)",
+        "deployment": "Streamlit Cloud ready"
+    },
+    "for_blog_post": {
+        "title": "How Kiro Accelerated Nagpur Daily Commuter Guide Development",
+        "key_talking_points": [
+            "Kiro's ability to understand and leverage rich context files (product.md)",
+            "How a single well-structured product.md file eliminated need for APIs/databases",
+            "Kiro's personality modeling from context (Nagpuri tone, slang, safety-first approach)",
+            "Time saved: Manual knowledge curation → Kiro-guided implementation",
+            "Scalability: Adding new cities/regions by extending product.md"
+        ],
+        "sections": [
+            "Problem Statement: Nagpur's unique traffic challenges",
+            "Solution Architecture: Kiro + product.md approach",
+            "Implementation Details: How Kiro built the Streamlit app",
+            "Results: Accuracy, user satisfaction, development speed",
+            "Screenshots needed: Kiro refining responses, product.md snippets, app demo"
+        ]
+    }
+}

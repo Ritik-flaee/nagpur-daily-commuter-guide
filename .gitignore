@@ -1,0 +1,67 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Streamlit
+.streamlit/
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+~*
+
+# Logs
+*.log
+logs/
+
+# Node (if using any JS tools)
+node_modules/
+npm-debug.log
+
+# Database (SQLite if added)
+*.db
+*.sqlite
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+*.csv
+temp/
+test_outputs/
+
+# NOTE: .kiro directory is NOT in this file – it must be tracked in Git!
