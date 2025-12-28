@@ -14,8 +14,13 @@ def load_product_context():
         return "Knowledge base not found."
 
 # Simplified Kiro response generator (same logic as test_app.py)
-def get_kiro_response(user_query, context):
+def get_kiro_response(user_query, context, user_area=None):
     query_lower = user_query.lower()
+    
+    # Location-aware prefix for responses
+    location_prefix = ""
+    if user_area:
+        location_prefix = f"📍 Since you're near **{user_area}**, here's my advice:\n\n"
 
     # TRAFFIC & ROUTE QUERIES
     if any(word in query_lower for word in ["sitabuldi", "traffic", "jam", "route", "how to get", "commute"]):
@@ -147,9 +152,13 @@ Try it tomorrow, bhau! ✅"""
 Stay safe, bhau! 🛡️✅"""
 
     # DEFAULT RESPONSE
+    location_tip = ""
+    if user_area:
+        location_tip = f"\n\n📍 **Your Location**: You're near {user_area}. Try asking:\n- 'How is traffic from {user_area} right now?'\n- 'Best route from {user_area} to Sitabuldi'"
+    
     return f"""🚕 **Nagpur Daily Commuter Guide**
 
-I understand you're asking about: "{user_query}"
+I understand you're asking about: "{user_query.replace('[User is near ', '').split(']')[0] if '[User is near' in user_query else user_query}"
 
 **Quick Answers:**
 - For traffic/routes: Ask about specific locations (e.g., "Dharampeth to Sitabuldi")
@@ -161,7 +170,7 @@ I understand you're asking about: "{user_query}"
 - "How do I get from Dharampeth to Sitabuldi at 6 PM?"
 - "What's the auto fare from Sitabuldi to Ramdaspeth?"
 - "Tell me about Nagpur Metro"
-- "Is it safe to travel alone at night?"
+- "Is it safe to travel alone at night?"{location_tip}
 
 Try one of these, or ask something specific about Nagpur commuting! ✅"""
 
@@ -269,20 +278,59 @@ HTML_TEMPLATE = """
             color: #666;
             font-style: italic;
         }
+        .location-banner {
+            background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .location-banner button {
+            background: white;
+            color: #2E7D32;
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+        .location-info {
+            font-size: 14px;
+        }
+        .nearby-suggestions {
+            background: #e8f5e9;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            border-left: 4px solid #4CAF50;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🚕 Nagpur Daily Commuter Guide</h1>
-        <p style="text-align: center; color: #666; margin-bottom: 30px;">
+        <p style="text-align: center; color: #666; margin-bottom: 20px;">
             <strong>AI-powered hyper-local assistant for navigating Nagpur's traffic chaos</strong><br>
             Powered by Kiro with real-time local expertise
         </p>
 
+        <div class="location-banner" id="location-banner">
+            <div class="location-info">
+                <span id="location-icon">📍</span>
+                <span id="location-text">Enable location for personalized suggestions</span>
+            </div>
+            <button onclick="getLocation()" id="location-btn">Enable Location</button>
+        </div>
+
+        <div class="nearby-suggestions" id="nearby-suggestions" style="display: none;">
+            <strong>🎯 Based on your location:</strong>
+            <div id="suggestions-content"></div>
+        </div>
+
         <div class="chat-container" id="chat-container">
             <div class="message kiro-message">
                 <strong>🚕 Kiro:</strong><br>
-                Namaste! I'm your Nagpur commuting buddy. Ask me anything about traffic, fares, safety, or metro routes. What can I help you with today?
+                Namaste! I'm your Nagpur commuting buddy. Ask me anything about traffic, fares, safety, or metro routes. Enable your location above for personalized suggestions! What can I help you with today?
             </div>
         </div>
 
@@ -311,6 +359,11 @@ HTML_TEMPLATE = """
             const message = input.value.trim();
             if (!message) return;
 
+            // Disable button during request
+            const sendBtn = document.querySelector('.input-container button');
+            sendBtn.disabled = true;
+            sendBtn.innerHTML = 'Sending...';
+
             // Add user message
             addMessage(message, 'user-message', 'You');
 
@@ -321,13 +374,24 @@ HTML_TEMPLATE = """
             document.getElementById('status').innerHTML = '🤔 Thinking...';
 
             try {
+                // Include user location in the request if available
+                const requestBody = { 
+                    message: message,
+                    location: userLocation,
+                    area: userArea ? userArea.name : null
+                };
+
                 const response = await fetch('/api/chat', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ message: message }),
+                    body: JSON.stringify(requestBody),
                 });
+
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
 
                 const data = await response.json();
 
@@ -335,9 +399,13 @@ HTML_TEMPLATE = """
                 addMessage(data.response, 'kiro-message', '🚕 Kiro');
 
             } catch (error) {
-                addMessage('Sorry, I encountered an error. Please try again.', 'kiro-message', '🚕 Kiro');
+                console.error('Error:', error);
+                addMessage('Sorry, I encountered an error. Please try again. Error: ' + error.message, 'kiro-message', '🚕 Kiro');
             }
 
+            // Re-enable button
+            sendBtn.disabled = false;
+            sendBtn.innerHTML = 'Send';
             document.getElementById('status').innerHTML = 'Ready to help with your Nagpur commuting questions!';
         }
 
@@ -359,6 +427,104 @@ HTML_TEMPLATE = """
                 sendMessage();
             }
         }
+
+        // User location storage
+        let userLocation = null;
+        let userArea = null;
+
+        // Nagpur areas with coordinates (approximate centers)
+        const nagpurAreas = [
+            { name: 'Sitabuldi', lat: 21.1458, lng: 79.0882, nearby: ['Zero Mile', 'Ramdaspeth', 'Gandhi Square'] },
+            { name: 'Dharampeth', lat: 21.1395, lng: 79.0756, nearby: ['Law College Square', 'Seminary Hills', 'Congress Nagar'] },
+            { name: 'Ramdaspeth', lat: 21.1377, lng: 79.0919, nearby: ['Sitabuldi', 'Sadar', 'Panchpaoli'] },
+            { name: 'Civil Lines', lat: 21.1591, lng: 79.0765, nearby: ['VCA Ground', 'Morris College', 'Railway Station'] },
+            { name: 'Wardha Road', lat: 21.1167, lng: 79.1083, nearby: ['Medical College', 'Ajni', 'Reshimbagh'] },
+            { name: 'Itwari', lat: 21.1551, lng: 79.0918, nearby: ['Gandhibagh', 'Cotton Market', 'Mahal'] },
+            { name: 'Sadar', lat: 21.1402, lng: 79.1012, nearby: ['Variety Square', 'Ramdaspeth', 'Hanuman Nagar'] },
+            { name: 'Manish Nagar', lat: 21.1083, lng: 79.0567, nearby: ['Trimurti Nagar', 'Laxmi Nagar', 'Somalwada'] },
+            { name: 'Ambazari', lat: 21.1285, lng: 79.0502, nearby: ['VNIT', 'Ambazari Lake', 'Subhash Nagar'] },
+            { name: 'Hingna Road', lat: 21.1167, lng: 78.9833, nearby: ['MIDC', 'Wadi', 'Automotive Square'] },
+            { name: 'Airport Area', lat: 21.0922, lng: 79.0472, nearby: ['Dr. Babasaheb Ambedkar Airport', 'Wardha Road', 'Khapri'] },
+            { name: 'Congress Nagar', lat: 21.1333, lng: 79.0667, nearby: ['Dharampeth', 'LAD College', 'Laxminagar'] }
+        ];
+
+        function getLocation() {
+            const btn = document.getElementById('location-btn');
+            const text = document.getElementById('location-text');
+            const icon = document.getElementById('location-icon');
+            
+            btn.innerHTML = 'Detecting...';
+            btn.disabled = true;
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        userLocation = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        };
+                        
+                        // Find nearest Nagpur area
+                        userArea = findNearestArea(userLocation.lat, userLocation.lng);
+                        
+                        icon.innerHTML = '✅';
+                        text.innerHTML = `Located near <strong>${userArea.name}</strong>`;
+                        btn.innerHTML = 'Update';
+                        btn.disabled = false;
+                        
+                        // Show nearby suggestions
+                        showNearbySuggestions(userArea);
+                        
+                        // Add location-aware greeting
+                        addMessage(`Great! I see you're near <strong>${userArea.name}</strong>. I can now give you personalized traffic updates and route suggestions from your area. What do you need help with?`, 'kiro-message', '🚕 Kiro');
+                    },
+                    function(error) {
+                        icon.innerHTML = '❌';
+                        text.innerHTML = 'Location access denied. Enter your area manually.';
+                        btn.innerHTML = 'Try Again';
+                        btn.disabled = false;
+                        console.error('Geolocation error:', error);
+                    },
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+                );
+            } else {
+                text.innerHTML = 'Geolocation not supported. Enter your area manually.';
+                btn.style.display = 'none';
+            }
+        }
+
+        function findNearestArea(lat, lng) {
+            let nearest = nagpurAreas[0];
+            let minDistance = Infinity;
+
+            nagpurAreas.forEach(area => {
+                const distance = Math.sqrt(
+                    Math.pow(lat - area.lat, 2) + Math.pow(lng - area.lng, 2)
+                );
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    nearest = area;
+                }
+            });
+
+            return nearest;
+        }
+
+        function showNearbySuggestions(area) {
+            const container = document.getElementById('nearby-suggestions');
+            const content = document.getElementById('suggestions-content');
+            
+            content.innerHTML = `
+                <p style="margin: 10px 0;">You're near <strong>${area.name}</strong>. Nearby areas: ${area.nearby.join(', ')}</p>
+                <div style="margin-top: 10px;">
+                    <button class="query-btn" onclick="setQuery('How is traffic from ${area.name} right now?')">Traffic from ${area.name}</button>
+                    <button class="query-btn" onclick="setQuery('Nearest metro station from ${area.name}')">Nearest Metro</button>
+                    <button class="query-btn" onclick="setQuery('Auto fare from ${area.name} to Sitabuldi')">Auto to Sitabuldi</button>
+                </div>
+            `;
+            
+            container.style.display = 'block';
+        }
     </script>
 </body>
 </html>
@@ -370,14 +536,28 @@ def home():
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
-    data = request.get_json()
-    user_message = data.get('message', '')
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'response': 'No data received. Please try again.'}), 400
+        
+        user_message = data.get('message', '')
+        user_location = data.get('location', None)
+        user_area = data.get('area', None)
 
-    # Load context and generate response
-    context = load_product_context()
-    response = get_kiro_response(user_message, context)
+        # Load context and generate response
+        context = load_product_context()
+        
+        # Enhance query with location context if available
+        enhanced_query = user_message
+        if user_area:
+            enhanced_query = f"[User is near {user_area}] {user_message}"
+        
+        response = get_kiro_response(enhanced_query, context, user_area)
 
-    return jsonify({'response': response})
+        return jsonify({'response': response})
+    except Exception as e:
+        return jsonify({'response': f'Error processing your request: {str(e)}'}), 500
 
 @app.route('/api/health')
 def health():
