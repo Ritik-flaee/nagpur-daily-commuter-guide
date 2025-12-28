@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 import os
 import json
 from datetime import datetime
@@ -8,12 +8,10 @@ app = Flask(__name__)
 # Load the product.md context
 def load_product_context():
     try:
-        # Try multiple paths for Vercel deployment
         paths_to_try = [
             'product.md',
             '../product.md',
             os.path.join(os.path.dirname(__file__), '..', 'product.md'),
-            '/var/task/product.md'
         ]
         for path in paths_to_try:
             if os.path.exists(path):
@@ -23,11 +21,10 @@ def load_product_context():
     except Exception as e:
         return f"Error: {str(e)}"
 
-# Simplified Kiro response generator
+# Kiro response generator
 def get_kiro_response(user_query, context, user_area=None):
     query_lower = user_query.lower()
     
-    # Location-aware prefix for responses
     location_prefix = ""
     if user_area:
         location_prefix = f"📍 Since you're near **{user_area}**, here's my advice:\n\n"
@@ -233,13 +230,13 @@ I understand you're asking about: "{clean_query}"
 Try one of these, or ask something specific about Nagpur commuting! ✅"""
 
 
-# HTML template for the web interface
-HTML_TEMPLATE = """<!DOCTYPE html>
+# HTML template
+HTML_PAGE = '''<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🚕 Nagpur Daily Commuter Guide</title>
+    <title>Nagpur Daily Commuter Guide</title>
     <style>
         * { box-sizing: border-box; }
         body {
@@ -423,192 +420,189 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <button id="send-btn">Send</button>
         </div>
 
-        <div class="sample-queries">
+        <div class="sample-queries" id="sample-queries">
             <h3>💡 Quick queries (click to try):</h3>
-            <button class="query-btn" data-query="How to get from Dharampeth to Sitabuldi at 6 PM?">Dharampeth → Sitabuldi</button>
-            <button class="query-btn" data-query="What is the auto fare from Sitabuldi to Ramdaspeth?">Auto Fares</button>
-            <button class="query-btn" data-query="Tell me about Nagpur Metro">Metro Info</button>
-            <button class="query-btn" data-query="Is it safe to travel alone at night?">Night Safety</button>
-            <button class="query-btn" data-query="Traffic update for Sitabuldi">Traffic Update</button>
+            <button class="query-btn">Dharampeth → Sitabuldi</button>
+            <button class="query-btn">Auto Fares</button>
+            <button class="query-btn">Metro Info</button>
+            <button class="query-btn">Night Safety</button>
+            <button class="query-btn">Traffic Update</button>
         </div>
 
         <div class="status" id="status">Ready to help! 🚗</div>
     </div>
 
     <script>
-        // State variables
-        var userLocation = null;
-        var userArea = null;
-
-        var nagpurAreas = [
-            { name: 'Sitabuldi', lat: 21.1458, lng: 79.0882, nearby: ['Zero Mile', 'Ramdaspeth'] },
-            { name: 'Dharampeth', lat: 21.1395, lng: 79.0756, nearby: ['Seminary Hills', 'Congress Nagar'] },
-            { name: 'Ramdaspeth', lat: 21.1377, lng: 79.0919, nearby: ['Sitabuldi', 'Sadar'] },
-            { name: 'Civil Lines', lat: 21.1591, lng: 79.0765, nearby: ['Railway Station', 'VCA Ground'] },
-            { name: 'Wardha Road', lat: 21.1167, lng: 79.1083, nearby: ['Medical College', 'Ajni'] },
-            { name: 'Itwari', lat: 21.1551, lng: 79.0918, nearby: ['Gandhibagh', 'Cotton Market'] },
-            { name: 'Ambazari', lat: 21.1285, lng: 79.0502, nearby: ['VNIT', 'Ambazari Lake'] },
-            { name: 'Airport Area', lat: 21.0922, lng: 79.0472, nearby: ['Khapri', 'Wardha Road'] }
-        ];
-
-        // DOM Elements
-        var chatContainer = document.getElementById('chat-container');
-        var userInput = document.getElementById('user-input');
-        var sendBtn = document.getElementById('send-btn');
-        var statusEl = document.getElementById('status');
-        var locationBtn = document.getElementById('location-btn');
-        var locationText = document.getElementById('location-text');
-        var locationIcon = document.getElementById('location-icon');
-        var nearbySuggestions = document.getElementById('nearby-suggestions');
-        var suggestionsContent = document.getElementById('suggestions-content');
-
-        // Add message to chat
-        function addMessage(text, className, sender) {
-            var div = document.createElement('div');
-            div.className = 'message ' + className;
-            var formattedText = text.replace(/\\n/g, '<br>').replace(/\n/g, '<br>');
-            formattedText = formattedText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-            div.innerHTML = '<strong>' + sender + ':</strong><br>' + formattedText;
-            chatContainer.appendChild(div);
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-        }
-
-        // Send message function
-        function sendMessage() {
-            var message = userInput.value.trim();
-            if (!message) return;
-
-            sendBtn.disabled = true;
-            sendBtn.innerHTML = '...';
-            statusEl.innerHTML = '🤔 Thinking...';
-
-            addMessage(message, 'user-message', 'You');
-            userInput.value = '';
-
-            var requestBody = { 
-                message: message,
-                area: userArea ? userArea.name : null
+        (function() {
+            var userArea = null;
+            
+            var queries = {
+                'Dharampeth → Sitabuldi': 'How to get from Dharampeth to Sitabuldi at 6 PM?',
+                'Auto Fares': 'What is the auto fare from Sitabuldi to Ramdaspeth?',
+                'Metro Info': 'Tell me about Nagpur Metro',
+                'Night Safety': 'Is it safe to travel alone at night?',
+                'Traffic Update': 'Traffic update for Sitabuldi'
             };
 
-            fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody)
-            })
-            .then(function(response) {
-                return response.json();
-            })
-            .then(function(data) {
-                var responseText = data.response || data.error || 'Got a response!';
-                addMessage(responseText, 'kiro-message', '🚕 Kiro');
-            })
-            .catch(function(error) {
-                console.error('Fetch error:', error);
-                addMessage('Connection error. Please try again.', 'kiro-message', '🚕 Kiro');
-            })
-            .finally(function() {
-                sendBtn.disabled = false;
-                sendBtn.innerHTML = 'Send';
-                statusEl.innerHTML = 'Ready to help! 🚗';
-            });
-        }
+            var nagpurAreas = [
+                { name: 'Sitabuldi', lat: 21.1458, lng: 79.0882, nearby: ['Zero Mile', 'Ramdaspeth'] },
+                { name: 'Dharampeth', lat: 21.1395, lng: 79.0756, nearby: ['Seminary Hills', 'Congress Nagar'] },
+                { name: 'Ramdaspeth', lat: 21.1377, lng: 79.0919, nearby: ['Sitabuldi', 'Sadar'] },
+                { name: 'Civil Lines', lat: 21.1591, lng: 79.0765, nearby: ['Railway Station', 'VCA Ground'] },
+                { name: 'Wardha Road', lat: 21.1167, lng: 79.1083, nearby: ['Medical College', 'Ajni'] },
+                { name: 'Itwari', lat: 21.1551, lng: 79.0918, nearby: ['Gandhibagh', 'Cotton Market'] },
+                { name: 'Ambazari', lat: 21.1285, lng: 79.0502, nearby: ['VNIT', 'Ambazari Lake'] },
+                { name: 'Airport Area', lat: 21.0922, lng: 79.0472, nearby: ['Khapri', 'Wardha Road'] }
+            ];
 
-        // Find nearest area
-        function findNearestArea(lat, lng) {
-            var nearest = nagpurAreas[0];
-            var minDist = Infinity;
-            for (var i = 0; i < nagpurAreas.length; i++) {
-                var area = nagpurAreas[i];
-                var dist = Math.sqrt(Math.pow(lat - area.lat, 2) + Math.pow(lng - area.lng, 2));
-                if (dist < minDist) { 
-                    minDist = dist; 
-                    nearest = area; 
+            function addMessage(text, isUser) {
+                var container = document.getElementById('chat-container');
+                var div = document.createElement('div');
+                div.className = 'message ' + (isUser ? 'user-message' : 'kiro-message');
+                var formatted = text.replace(/\\n/g, '<br>').replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>');
+                div.innerHTML = '<strong>' + (isUser ? 'You' : '🚕 Kiro') + ':</strong><br>' + formatted;
+                container.appendChild(div);
+                container.scrollTop = container.scrollHeight;
+            }
+
+            function sendMessage() {
+                var input = document.getElementById('user-input');
+                var message = input.value.trim();
+                if (!message) return;
+
+                var btn = document.getElementById('send-btn');
+                btn.disabled = true;
+                btn.textContent = '...';
+                document.getElementById('status').textContent = '🤔 Thinking...';
+
+                addMessage(message, true);
+                input.value = '';
+
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', '/api/chat', true);
+                xhr.setRequestHeader('Content-Type', 'application/json');
+                xhr.onreadystatechange = function() {
+                    if (xhr.readyState === 4) {
+                        btn.disabled = false;
+                        btn.textContent = 'Send';
+                        document.getElementById('status').textContent = 'Ready to help! 🚗';
+                        
+                        if (xhr.status === 200) {
+                            try {
+                                var data = JSON.parse(xhr.responseText);
+                                addMessage(data.response || 'Got response!', false);
+                            } catch(e) {
+                                addMessage('Error parsing response', false);
+                            }
+                        } else {
+                            addMessage('Connection error. Status: ' + xhr.status, false);
+                        }
+                    }
+                };
+                xhr.onerror = function() {
+                    btn.disabled = false;
+                    btn.textContent = 'Send';
+                    document.getElementById('status').textContent = 'Ready to help! 🚗';
+                    addMessage('Network error. Please try again.', false);
+                };
+                xhr.send(JSON.stringify({ message: message, area: userArea }));
+            }
+
+            function findNearestArea(lat, lng) {
+                var nearest = nagpurAreas[0];
+                var minDist = Infinity;
+                for (var i = 0; i < nagpurAreas.length; i++) {
+                    var area = nagpurAreas[i];
+                    var dist = Math.sqrt(Math.pow(lat - area.lat, 2) + Math.pow(lng - area.lng, 2));
+                    if (dist < minDist) { 
+                        minDist = dist; 
+                        nearest = area; 
+                    }
+                }
+                return nearest;
+            }
+
+            function getLocation() {
+                var btn = document.getElementById('location-btn');
+                var text = document.getElementById('location-text');
+                var icon = document.getElementById('location-icon');
+                
+                btn.textContent = 'Detecting...';
+                btn.disabled = true;
+
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        function(pos) {
+                            var area = findNearestArea(pos.coords.latitude, pos.coords.longitude);
+                            userArea = area.name;
+                            
+                            icon.textContent = '✅';
+                            text.innerHTML = 'Near <strong>' + area.name + '</strong>';
+                            btn.textContent = 'Update';
+                            btn.disabled = false;
+                            
+                            document.getElementById('suggestions-content').innerHTML = '📍 <strong>' + area.name + '</strong> - Nearby: ' + area.nearby.join(', ');
+                            document.getElementById('nearby-suggestions').style.display = 'block';
+                            addMessage('Great! You are near <strong>' + area.name + '</strong>. I can now give personalized suggestions!', false);
+                        },
+                        function(err) {
+                            icon.textContent = '❌';
+                            text.textContent = 'Location denied';
+                            btn.textContent = 'Try Again';
+                            btn.disabled = false;
+                        },
+                        { enableHighAccuracy: true, timeout: 10000 }
+                    );
+                } else {
+                    text.textContent = 'Geolocation not supported';
+                    btn.style.display = 'none';
                 }
             }
-            return nearest;
-        }
 
-        // Show nearby suggestions
-        function showNearbySuggestions(area) {
-            suggestionsContent.innerHTML = '<strong>📍 ' + area.name + '</strong> - Nearby: ' + area.nearby.join(', ');
-            nearbySuggestions.style.display = 'block';
-        }
-
-        // Get location function
-        function getLocation() {
-            locationBtn.innerHTML = 'Detecting...';
-            locationBtn.disabled = true;
-
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    function(pos) {
-                        userLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-                        userArea = findNearestArea(userLocation.lat, userLocation.lng);
-                        
-                        locationIcon.innerHTML = '✅';
-                        locationText.innerHTML = 'Near <strong>' + userArea.name + '</strong>';
-                        locationBtn.innerHTML = 'Update';
-                        locationBtn.disabled = false;
-                        
-                        showNearbySuggestions(userArea);
-                        addMessage('Great! You are near <strong>' + userArea.name + '</strong>. I can now give personalized route suggestions!', 'kiro-message', '🚕 Kiro');
-                    },
-                    function(err) {
-                        console.error('Geolocation error:', err);
-                        locationIcon.innerHTML = '❌';
-                        locationText.innerHTML = 'Location denied - enter area manually';
-                        locationBtn.innerHTML = 'Try Again';
-                        locationBtn.disabled = false;
-                    },
-                    { enableHighAccuracy: true, timeout: 10000 }
-                );
-            } else {
-                locationText.innerHTML = 'Geolocation not supported';
-                locationBtn.style.display = 'none';
-            }
-        }
-
-        // Event Listeners - using addEventListener for better compatibility
-        sendBtn.addEventListener('click', function() {
-            sendMessage();
-        });
-
-        userInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                sendMessage();
-            }
-        });
-
-        locationBtn.addEventListener('click', function() {
-            getLocation();
-        });
-
-        // Query buttons - using event delegation
-        document.querySelector('.sample-queries').addEventListener('click', function(e) {
-            if (e.target.classList.contains('query-btn')) {
-                var query = e.target.getAttribute('data-query');
-                if (query) {
-                    userInput.value = query;
+            // Setup event listeners when DOM is ready
+            document.getElementById('send-btn').onclick = sendMessage;
+            
+            document.getElementById('user-input').onkeypress = function(e) {
+                if (e.key === 'Enter' || e.keyCode === 13) {
                     sendMessage();
                 }
+            };
+            
+            document.getElementById('location-btn').onclick = getLocation;
+            
+            var queryBtns = document.querySelectorAll('.query-btn');
+            for (var i = 0; i < queryBtns.length; i++) {
+                queryBtns[i].onclick = function() {
+                    var btnText = this.textContent;
+                    var query = queries[btnText];
+                    if (query) {
+                        document.getElementById('user-input').value = query;
+                        sendMessage();
+                    }
+                };
             }
-        });
-
-        console.log('Nagpur Commuter Guide loaded successfully!');
+        })();
     </script>
 </body>
-</html>"""
+</html>'''
 
 
 @app.route('/')
 def home():
-    return HTML_TEMPLATE
+    return Response(HTML_PAGE, mimetype='text/html')
 
 
-@app.route('/api/chat', methods=['POST'])
+@app.route('/api/chat', methods=['POST', 'OPTIONS'])
 def chat():
+    if request.method == 'OPTIONS':
+        response = Response()
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
+    
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
         user_message = data.get('message', '')
         user_area = data.get('area', None)
         
@@ -617,11 +611,15 @@ def chat():
         if user_area:
             enhanced_query = f"[User is near {user_area}] {user_message}"
         
-        response = get_kiro_response(enhanced_query, context, user_area)
+        response_text = get_kiro_response(enhanced_query, context, user_area)
         
-        return jsonify({'response': response})
+        resp = jsonify({'response': response_text})
+        resp.headers['Access-Control-Allow-Origin'] = '*'
+        return resp
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        resp = jsonify({'error': str(e)})
+        resp.headers['Access-Control-Allow-Origin'] = '*'
+        return resp, 500
 
 
 @app.route('/api/health', methods=['GET'])
@@ -632,6 +630,6 @@ def health():
     })
 
 
-# For Vercel serverless deployment
+# This is required for Vercel
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=5000)
